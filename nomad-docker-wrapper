@@ -19,6 +19,6 @@ echo "Removing container $NOMAD_DOCKER_CONTAINER_NAME"
 docker rm $NOMAD_DOCKER_CONTAINER_NAME
 
 echo "Starting container $NOMAD_DOCKER_CONTAINER_NAME"
-exec docker run \
+exec docker run -it \
   --name $NOMAD_DOCKER_CONTAINER_NAME \
   $NOMAD_DOCKER_COMMAND
