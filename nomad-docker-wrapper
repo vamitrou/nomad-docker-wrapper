@@ -65,6 +65,8 @@ CONTAINER_ID=$(docker run -d \
   --name $NOMAD_DOCKER_CONTAINER_NAME \
   $NOMAD_DOCKER_COMMAND)
 
+echo "docker run -d --name $NOMAD_DOCKER_CONTAINER_NAME $NOMAD_DOCKER_COMMAND"
+
 if [ $? -ne 0 ]; then
   echo "Failed to start $NOMAD_DOCKER_CONTAINER_NAME"
   exit
