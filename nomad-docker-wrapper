@@ -1,5 +1,13 @@
 #!/bin/bash
 
+anywait() {
+  for pid in "$@"; do
+    while kill -0 "$pid"; do
+      sleep 0.5
+    done
+  done
+}
+
 NOMAD_DOCKER_COMMAND=$*
 
 if [ -z "$NOMAD_DOCKER_CONTAINER_NAME" ]; then
@@ -12,13 +20,56 @@ if [ -z "$NOMAD_DOCKER_COMMAND" ]; then
   exit
 fi
 
+if ! [ -z "$NOMAD_DOCKER_REGISTRY_URL" ]; then
+  echo "Logging in to $NOMAD_DOCKER_REGISTRY_URL"
+  docker login -u $NOMAD_DOCKER_REGISTRY_USER \
+    -p $NOMAD_DOCKER_REGISTRY_PASSWORD \
+    -e $NOMAD_DOCKER_REGISTRY_EMAIL \
+    $NOMAD_DOCKER_REGISTRY_URL
+fi
+
 echo "Stopping container $NOMAD_DOCKER_CONTAINER_NAME"
 docker stop $NOMAD_DOCKER_CONTAINER_NAME
 
 echo "Removing container $NOMAD_DOCKER_CONTAINER_NAME"
 docker rm $NOMAD_DOCKER_CONTAINER_NAME
 
+if ! [ -z "$NOMAD_DOCKER_PULL_COMMAND" ]; then
+  echo "Executing docker pull $NOMAD_DOCKER_PULL_COMMAND"
+  docker pull $NOMAD_DOCKER_PULL_COMMAND
+  if [ $? -ne 0 ]; then
+    echo "Docker pull failed"
+    exit
+  fi
+fi
+
+if ! [ -z "$NOMAD_DOCKER_ENVSUBST" ]; then
+  echo "Replacing environment variables in $NOMAD_DOCKER_COMMAND"
+  NOMAD_DOCKER_COMMAND=$(echo $NOMAD_DOCKER_COMMAND | envsubst)
+fi
+
+_stop() {
+  echo "Stopping container $NOMAD_DOCKER_CONTAINER_NAME"
+  until docker stop $NOMAD_DOCKER_CONTAINER_NAME
+  do
+    sleep 1
+  done
+}
+
+echo "Trapping SIGINT, SIGTERM and SIGKILL"
+trap _stop SIGINT
+trap _stop SIGTERM
+
 echo "Starting container $NOMAD_DOCKER_CONTAINER_NAME"
-exec docker run -it \
+CONTAINER_ID=$(docker run -d \
   --name $NOMAD_DOCKER_CONTAINER_NAME \
-  $NOMAD_DOCKER_COMMAND
+  $NOMAD_DOCKER_COMMAND)
+
+if [ $? -ne 0 ]; then
+  echo "Failed to start $NOMAD_DOCKER_CONTAINER_NAME"
+  exit
+fi
+
+echo "Waiting for container $NOMAD_DOCKER_CONTAINER_NAME ($CONTAINER_ID) to finish"
+PID=$(ps aux | grep "docker-containerd-shim $CONTAINER_ID" | grep -v "grep" | awk '{print $2}')
+anywait $PID
